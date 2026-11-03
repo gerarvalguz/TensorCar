@@ -1,7 +1,7 @@
 import SwiftUI
 
 @main
-struct AutoOBDApp: App {
+struct TensorCarApp: App {
     var body: some Scene {
         WindowGroup { ContentView() }
     }

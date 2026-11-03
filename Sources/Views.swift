@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 extension Color {
     static let brand = Color(red: 0.97, green: 0.56, blue: 0.08)
@@ -57,19 +58,35 @@ struct Screen<Content: View>: View {
     let greeting: String
     let title: String
     let icon: String
+    var list = false  // a List instead of a ScrollView, so rows can have swipe actions
     @ViewBuilder let content: Content
     @AppStorage("theme") private var theme = "auto"
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) { content }
-                .padding(16)
+        Group {
+            if list {
+                List {
+                    Group { content }
+                        .listRowSeparator(.hidden)
+                        .listRowBackground(Color.clear)
+                        .listRowInsets(EdgeInsets(top: 8, leading: 16, bottom: 8, trailing: 16))
+                }
+                .listStyle(.plain)
+                .scrollContentBackground(.hidden)
+                .contentMargins(.top, 8, for: .scrollContent)
+            } else {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) { content }
+                        .padding(16)
+                }
+            }
         }
         .safeAreaInset(edge: .top, spacing: 0) {
             HStack {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(greeting).font(.subheadline).opacity(0.9)
                     Text(title).font(.title2.bold())
+                    Text("by OnceOnce Studio").font(.caption2.weight(.medium)).opacity(0.8)
                 }
                 Spacer()
                 // cycles automático -> claro -> oscuro
@@ -102,6 +119,7 @@ struct ContentView: View {
     @State private var model = OBDModel()
     @State private var tab = 0
     @AppStorage("theme") private var theme = "auto"
+    @AppStorage("seenTutorial") private var seenTutorial = false
 
     var body: some View {
         TabView(selection: $tab) {
@@ -114,6 +132,9 @@ struct ContentView: View {
         .tint(.brand)
         .preferredColorScheme(theme == "light" ? .light : theme == "dark" ? .dark : nil)
         .onChange(of: model.state) { _, new in if new == .connected { tab = 1 } }
+        .fullScreenCover(isPresented: Binding(get: { !seenTutorial }, set: { seenTutorial = !$0 })) {
+            Tutorial { seenTutorial = true }
+        }
     }
 }
 
@@ -326,6 +347,7 @@ extension Health {
 struct FaultsView: View {
     @Bindable var model: OBDModel
     @State private var confirmClear = false
+    @State private var selectedCode: String?
 
     var body: some View {
         Screen(greeting: "Diagnóstico", title: "Fallas del motor", icon: "wrench.and.screwdriver.fill") {
@@ -335,11 +357,14 @@ struct FaultsView: View {
                 group("Pendientes", model.pending)
                 group("Permanentes", model.permanent)
                 Button("Borrar fallas y apagar luz MIL") { confirmClear = true }.buttonStyle(BrandButton())
-                Text("Desliza hacia abajo para actualizar.")
+                Text("Toca un código para ver qué significa. Desliza hacia abajo para actualizar.")
                     .font(.footnote).foregroundStyle(.secondary).frame(maxWidth: .infinity)
             }
         }
         .refreshable { await model.refreshDTCs() }
+        .sheet(isPresented: Binding(get: { selectedCode != nil }, set: { if !$0 { selectedCode = nil } })) {
+            if let selectedCode { DTCDetail(code: selectedCode) }
+        }
         .alert("¿Borrar las fallas?", isPresented: $confirmClear) {
             Button("Borrar", role: .destructive) { Task { await model.clearDTCs() } }
             Button("Cancelar", role: .cancel) {}
@@ -375,20 +400,23 @@ struct FaultsView: View {
             }
             if codes.isEmpty { Text("Ninguna").font(.subheadline).foregroundStyle(.secondary) }
             ForEach(codes, id: \.self) { code in
-                HStack(spacing: 12) {
-                    Text(code)
-                        .font(.headline.monospaced()).foregroundStyle(Color.brand)
-                        .padding(.horizontal, 10).padding(.vertical, 8)
-                        .background(Color.brandSoft, in: RoundedRectangle(cornerRadius: 10))
-                    Text(kind(code)).font(.subheadline).foregroundStyle(.secondary)
-                    Spacer()
-                    Link(destination: URL(string: "https://www.google.com/search?q=OBD2+\(code)")!) {
-                        Text("Buscar")
-                            .font(.caption.bold()).foregroundStyle(.white)
-                            .padding(.horizontal, 12).padding(.vertical, 6)
-                            .background(Color.brand, in: Capsule())
+                Button { selectedCode = code } label: {
+                    HStack(spacing: 12) {
+                        Text(code)
+                            .font(.headline.monospaced()).foregroundStyle(Color.brand)
+                            .padding(.horizontal, 10).padding(.vertical, 8)
+                            .background(Color.brandSoft, in: RoundedRectangle(cornerRadius: 10))
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(DTCDictionary.all[code]?.t ?? "Sin descripción offline")
+                                .font(.subheadline).multilineTextAlignment(.leading).lineLimit(2)
+                            Text(kind(code)).font(.caption).foregroundStyle(.secondary)
+                        }
+                        Spacer()
+                        Image(systemName: "chevron.right").font(.caption.bold()).foregroundStyle(.secondary)
                     }
+                    .contentShape(Rectangle())
                 }
+                .buttonStyle(.plain)
             }
         }
         .card()
@@ -493,11 +521,33 @@ struct HistoryView: View {
     var history: History
     @State private var adding = false
     @State private var addingTires = false
+    @State private var editing: Entry?
+    @State private var backup: BackupFile?
+    @State private var importing = false
+    @State private var showInfo = false
+    @State private var message: String?
 
     var body: some View {
-        Screen(greeting: "Historial", title: "La vida de tu auto", icon: "clock.arrow.circlepath") {
+        Screen(greeting: "Historial", title: "La vida de tu auto", icon: "clock.arrow.circlepath", list: true) {
             Button { adding = true } label: { Label("Agregar servicio, reparación o choque", systemImage: "plus") }
                 .buttonStyle(BrandButton())
+            HStack(spacing: 10) {
+                Button {
+                    do { backup = BackupFile(data: try history.exportData()) } catch { message = "No se pudo crear el respaldo." }
+                } label: { Label("Exportar", systemImage: "square.and.arrow.up") }
+                    .buttonStyle(BrandButton(primary: false))
+                    .disabled(history.entries.isEmpty)
+                Button { importing = true } label: { Label("Importar", systemImage: "square.and.arrow.down") }
+                    .buttonStyle(BrandButton(primary: false))
+                Button { showInfo = true } label: {
+                    Image(systemName: "info.circle.fill")
+                        .font(.title3).foregroundStyle(Color.brand)
+                        .frame(width: 52, height: 52)
+                        .background(Color.brandSoft, in: RoundedRectangle(cornerRadius: 14))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Cómo funciona el respaldo")
+            }
             TireCard(latest: history.entries.first { $0.kind == .tires }) { addingTires = true }
             if history.entries.isEmpty {
                 ContentUnavailableView("Sin registros todavía", systemImage: "clock",
@@ -505,17 +555,64 @@ struct HistoryView: View {
                     .card()
             } else {
                 ForEach(history.entries) { entry in
-                    EntryRow(entry: entry).contextMenu {
-                        Button("Eliminar", systemImage: "trash", role: .destructive) { history.delete(entry.id) }
-                    }
+                    EntryRow(entry: entry)
+                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                            Button(role: .destructive) { history.delete(entry.id) } label: { Label("Eliminar", systemImage: "trash") }
+                        }
+                        .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                            Button { editing = entry } label: { Label("Editar", systemImage: "pencil") }.tint(.brand)
+                        }
                 }
-                Text("Mantén presionado un registro para eliminarlo.")
-                    .font(.footnote).foregroundStyle(.secondary).frame(maxWidth: .infinity)
+                Text("Desliza un registro a la izquierda para eliminarlo o a la derecha para editarlo.")
+                    .font(.footnote).foregroundStyle(.secondary).frame(maxWidth: .infinity).multilineTextAlignment(.center)
             }
         }
         .sheet(isPresented: $adding) { EntryForm { history.add($0) } }
         .sheet(isPresented: $addingTires) { TireForm { history.add($0) } }
+        .sheet(item: $editing) { entry in
+            if entry.kind == .tires { TireForm(editing: entry) { history.add($0) } } else { EntryForm(editing: entry) { history.add($0) } }
+        }
+        .fileExporter(isPresented: Binding(get: { backup != nil }, set: { if !$0 { backup = nil } }), document: backup,
+                      contentType: .json, defaultFilename: "TensorCar-historial-\(Date().formatted(.iso8601.year().month().day()))") { result in
+            if case .success = result { message = "Respaldo guardado. Tenlo en tu nube para no perderlo." }
+        }
+        .fileImporter(isPresented: $importing, allowedContentTypes: [.json]) { result in
+            do {
+                let url = try result.get()
+                let scoped = url.startAccessingSecurityScopedResource()
+                defer { if scoped { url.stopAccessingSecurityScopedResource() } }
+                let added = try history.importData(Data(contentsOf: url))
+                message = added == 0 ? "Ese respaldo no tenía registros nuevos." : "Se importaron \(added) registros."
+            } catch {
+                message = "No se pudo importar: el archivo no es un respaldo válido de TensorCar."
+            }
+        }
+        .alert("Respaldo del historial", isPresented: $showInfo) {
+            Button("Entendido") {}
+        } message: {
+            Text("""
+            Exportar crea un archivo JSON con todo tu historial: escaneos, fallas, servicios, reparaciones, choques y presión de llantas.
+
+            Guárdalo en iCloud Drive, Google Drive u otra nube. Así no lo pierdes si cambias de iPhone o borras la app, y puedes compartirlo al vender el auto.
+
+            Importar agrega los registros del archivo que aún no estén en la app. Nunca borra nada.
+            """)
+        }
+        .alert("Historial", isPresented: Binding(get: { message != nil }, set: { if !$0 { message = nil } })) {
+            Button("OK") {}
+        } message: { Text(message ?? "") }
     }
+}
+
+/// The backup as a file the system save sheet can write to iCloud Drive or any other provider.
+struct BackupFile: FileDocument {
+    static var readableContentTypes: [UTType] { [.json] }
+    let data: Data
+
+    init(data: Data) { self.data = data }
+    init(configuration: ReadConfiguration) throws { data = configuration.file.regularFileContents ?? Data() }
+
+    func fileWrapper(configuration: WriteConfiguration) throws -> FileWrapper { FileWrapper(regularFileWithContents: data) }
 }
 
 struct EntryRow: View {
@@ -564,24 +661,41 @@ struct EntryRow: View {
 }
 
 struct EntryForm: View {
+    private let original: Entry?
     let onSave: (Entry) -> Void
     @Environment(\.dismiss) private var dismiss
-    @State private var kind = Entry.Kind.service
-    @State private var date = Date()
-    @State private var title = ""
-    @State private var km = ""
-    @State private var place = ""
-    @State private var cost = ""
-    @State private var notes = ""
+    @State private var kind: Entry.Kind
+    @State private var date: Date
+    @State private var title: String
+    @State private var km: String
+    @State private var place: String
+    @State private var cost: String
+    @State private var notes: String
+
+    /// New entry, or an edit of `original` that keeps its id and scan data.
+    init(editing original: Entry? = nil, onSave: @escaping (Entry) -> Void) {
+        self.original = original
+        self.onSave = onSave
+        _kind = State(initialValue: original?.kind ?? .service)
+        _date = State(initialValue: original?.date ?? Date())
+        _title = State(initialValue: original?.title ?? "")
+        _km = State(initialValue: original?.km.map(String.init) ?? "")
+        _place = State(initialValue: original?.place ?? "")
+        _cost = State(initialValue: original?.cost.map { $0.formatted() } ?? "")
+        _notes = State(initialValue: original?.notes ?? "")
+    }
 
     var body: some View {
         NavigationStack {
             Form {
-                Section {
-                    Picker("Tipo", selection: $kind) {
-                        ForEach(Entry.Kind.manual, id: \.self) { Text($0.label) }
+                // scans and clears are recorded by the app; only their text can change
+                if Entry.Kind.manual.contains(kind) {
+                    Section {
+                        Picker("Tipo", selection: $kind) {
+                            ForEach(Entry.Kind.manual, id: \.self) { Text($0.label) }
+                        }
+                        .pickerStyle(.segmented)
                     }
-                    .pickerStyle(.segmented)
                 }
                 Section {
                     TextField("Qué se hizo (ej. cambio de aceite)", text: $title)
@@ -594,7 +708,7 @@ struct EntryForm: View {
                     TextField("Detalles, piezas cambiadas, daños…", text: $notes, axis: .vertical).lineLimit(3...8)
                 }
             }
-            .navigationTitle("Nuevo registro")
+            .navigationTitle(original == nil ? "Nuevo registro" : "Editar registro")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancelar") { dismiss() } }
@@ -612,8 +726,15 @@ struct EntryForm: View {
     }
 
     private func save() {
-        onSave(Entry(date: date, kind: kind, title: clean(title) ?? "", km: Int(km.filter(\.isNumber)), place: clean(place),
-                     cost: try? Double(cost, format: .number), notes: clean(notes)))
+        var entry = original ?? Entry(kind: kind, title: "")
+        entry.kind = kind
+        entry.date = date
+        entry.title = clean(title) ?? ""
+        entry.km = Int(km.filter(\.isNumber))
+        entry.place = clean(place)
+        entry.cost = try? Double(cost, format: .number)
+        entry.notes = clean(notes)
+        onSave(entry)
         dismiss()
     }
 }
@@ -663,11 +784,20 @@ struct TireCard: View {
 }
 
 struct TireForm: View {
+    private let original: Entry?
     let onSave: (Entry) -> Void
     @Environment(\.dismiss) private var dismiss
     @AppStorage("tireTarget") private var target = 32.0
-    @State private var values = ["", "", "", ""]
-    @State private var date = Date()
+    @State private var values: [String]
+    @State private var date: Date
+
+    init(editing original: Entry? = nil, onSave: @escaping (Entry) -> Void) {
+        self.original = original
+        self.onSave = onSave
+        let tires = original?.tires.flatMap { $0.count == 4 ? $0 : nil }
+        _values = State(initialValue: tires?.map { $0.formatted() } ?? ["", "", "", ""])
+        _date = State(initialValue: original?.date ?? Date())
+    }
 
     var body: some View {
         NavigationStack {
@@ -694,7 +824,10 @@ struct TireForm: View {
                 ToolbarItem(placement: .cancellationAction) { Button("Cancelar") { dismiss() } }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Guardar") {
-                        onSave(Entry(date: date, kind: .tires, title: "Presión de neumáticos", tires: parsed))
+                        var entry = original ?? Entry(kind: .tires, title: "Presión de neumáticos")
+                        entry.date = date
+                        entry.tires = parsed
+                        onSave(entry)
                         dismiss()
                     }
                     .disabled(parsed == nil)

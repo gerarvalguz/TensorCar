@@ -1,5 +1,5 @@
 import XCTest
-@testable import AutoOBD
+@testable import TensorCar
 
 final class OBDTests: XCTestCase {
     func testMockCarEndToEnd() async throws {
@@ -71,6 +71,31 @@ final class OBDTests: XCTestCase {
         let wide = try XCTUnwrap(PID.all.first { $0.id == 0x34 })
         XCTAssertEqual(wide.value([0x80, 0x00, 0x80, 0x00]), 1.0)
         XCTAssertTrue(KeySensor.all.allSatisfy { $0.pids.allSatisfy { id in PID.all.contains { $0.id == id } } })
+    }
+
+    func testOfflineDTCDictionary() {
+        XCTAssertGreaterThan(DTCDictionary.all.count, 9000)
+        XCTAssertFalse(DTCDictionary.all["P0420"]?.t.isEmpty ?? true)
+    }
+
+    @MainActor func testBackupRoundTrip() throws {
+        let tmp = FileManager.default.temporaryDirectory
+        let source = History(url: tmp.appending(path: "\(UUID()).json"))
+        source.add(Entry(kind: .service, title: "Cambio de aceite", km: 15000, cost: 1200))
+        source.add(Entry(kind: .tires, title: "Presión de neumáticos", tires: [32, 32, 30, 31]))
+        let data = try source.exportData()
+
+        let target = History(url: tmp.appending(path: "\(UUID()).json"))
+        XCTAssertEqual(try target.importData(data), 2)
+        XCTAssertEqual(try target.importData(data), 0)  // re-import adds nothing
+        XCTAssertEqual(target.entries.first { $0.kind == .tires }?.tires, [32, 32, 30, 31])
+        XCTAssertThrowsError(try target.importData(Data("{\"entries\":[]}".utf8)))  // not a TensorCar backup
+
+        var edited = target.entries[0]
+        edited.title = "Editado"
+        target.add(edited)
+        XCTAssertEqual(target.entries.count, 2)  // edit replaces, not duplicates
+        XCTAssertTrue(target.entries.contains { $0.title == "Editado" })
     }
 
     func testTireState() {

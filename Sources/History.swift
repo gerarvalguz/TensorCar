@@ -34,6 +34,15 @@ struct Entry: Codable, Identifiable {
     var tires: [Double]?  // psi, in Tires.names order
 }
 
+/// The exported file: the entries plus enough to recognise it on import.
+struct Backup: Codable {
+    static let appName = "TensorCar"
+    var app = Backup.appName
+    var version = 1
+    var exported = Date()
+    var entries: [Entry]
+}
+
 /// The car's timeline: automatic scans plus what the owner writes down. Lives in a JSON file on the phone.
 @MainActor @Observable
 final class History {
@@ -47,10 +56,34 @@ final class History {
         catch { try? data.write(to: url.deletingPathExtension().appendingPathExtension("corrupt.json")) }  // keep it instead of overwriting on next save
     }
 
+    /// Adds the entry, or replaces the one with the same id (an edit).
     func add(_ entry: Entry) {
-        entries.append(entry)
+        if let i = entries.firstIndex(where: { $0.id == entry.id }) { entries[i] = entry } else { entries.append(entry) }
         entries.sort { $0.date > $1.date }
         save()
+    }
+
+    /// A readable JSON backup of the whole history, to keep in a cloud drive.
+    func exportData() throws -> Data {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        encoder.dateEncodingStrategy = .iso8601
+        return try encoder.encode(Backup(entries: entries))
+    }
+
+    /// Merges a backup: adds the entries this phone doesn't have yet and never deletes. Returns how many were added.
+    func importData(_ data: Data) throws -> Int {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let backup = try decoder.decode(Backup.self, from: data)
+        guard backup.app == Backup.appName else { throw CocoaError(.fileReadCorruptFile) }
+        let known = Set(entries.map(\.id))
+        let new = backup.entries.filter { !known.contains($0.id) }
+        guard !new.isEmpty else { return 0 }
+        entries += new
+        entries.sort { $0.date > $1.date }
+        save()
+        return new.count
     }
 
     func delete(_ id: UUID) {

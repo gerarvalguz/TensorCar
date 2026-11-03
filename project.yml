@@ -1,4 +1,4 @@
-name: AutoOBD
+name: TensorCar
 options:
   bundleIdPrefix: com.gera
   deploymentTarget:
@@ -9,14 +9,14 @@ settings:
     MARKETING_VERSION: "1.0"
     CURRENT_PROJECT_VERSION: "1"
 targets:
-  AutoOBD:
+  TensorCar:
     type: application
     platform: iOS
     sources: [Sources]
     info:
       path: Info.plist
       properties:
-        CFBundleDisplayName: Auto OBD
+        CFBundleDisplayName: TensorCar
         UILaunchScreen: {}
         # white status bar over the orange headers
         UIViewControllerBasedStatusBarAppearance: false
@@ -24,9 +24,10 @@ targets:
         NSLocalNetworkUsageDescription: Se conecta por WiFi al adaptador OBD para leer los datos del auto.
     settings:
       base:
+        # kept from the Auto OBD days so installed copies keep their history
         PRODUCT_BUNDLE_IDENTIFIER: com.gera.autoobd
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-  AutoOBDTests:
+  TensorCarTests:
     type: bundle.unit-test
     platform: iOS
     sources: [Tests]
@@ -34,11 +35,11 @@ targets:
       base:
         GENERATE_INFOPLIST_FILE: YES
     dependencies:
-      - target: AutoOBD
+      - target: TensorCar
 schemes:
-  AutoOBD:
+  TensorCar:
     build:
       targets:
-        AutoOBD: all
+        TensorCar: all
     test:
-      targets: [AutoOBDTests]
+      targets: [TensorCarTests]

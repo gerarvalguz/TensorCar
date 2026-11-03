@@ -15,10 +15,10 @@
             buildForAnalyzing = "YES">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "B1BAEFC9385BBEBD61CBA96B"
-               BuildableName = "AutoOBD.app"
-               BlueprintName = "AutoOBD"
-               ReferencedContainer = "container:AutoOBD.xcodeproj">
+               BlueprintIdentifier = "B8BC029283760D18DB0E8106"
+               BuildableName = "TensorCar.app"
+               BlueprintName = "TensorCar"
+               ReferencedContainer = "container:TensorCar.xcodeproj">
             </BuildableReference>
          </BuildActionEntry>
       </BuildActionEntries>
@@ -32,10 +32,10 @@
       <MacroExpansion>
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "B1BAEFC9385BBEBD61CBA96B"
-            BuildableName = "AutoOBD.app"
-            BlueprintName = "AutoOBD"
-            ReferencedContainer = "container:AutoOBD.xcodeproj">
+            BlueprintIdentifier = "B8BC029283760D18DB0E8106"
+            BuildableName = "TensorCar.app"
+            BlueprintName = "TensorCar"
+            ReferencedContainer = "container:TensorCar.xcodeproj">
          </BuildableReference>
       </MacroExpansion>
       <Testables>
@@ -44,10 +44,10 @@
             parallelizable = "NO">
             <BuildableReference
                BuildableIdentifier = "primary"
-               BlueprintIdentifier = "E9ACEB71F9FA0E94640AFE6F"
-               BuildableName = "AutoOBDTests.xctest"
-               BlueprintName = "AutoOBDTests"
-               ReferencedContainer = "container:AutoOBD.xcodeproj">
+               BlueprintIdentifier = "3D40B3A5B941A504FAB11802"
+               BuildableName = "TensorCarTests.xctest"
+               BlueprintName = "TensorCarTests"
+               ReferencedContainer = "container:TensorCar.xcodeproj">
             </BuildableReference>
          </TestableReference>
       </Testables>
@@ -68,10 +68,10 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "B1BAEFC9385BBEBD61CBA96B"
-            BuildableName = "AutoOBD.app"
-            BlueprintName = "AutoOBD"
-            ReferencedContainer = "container:AutoOBD.xcodeproj">
+            BlueprintIdentifier = "B8BC029283760D18DB0E8106"
+            BuildableName = "TensorCar.app"
+            BlueprintName = "TensorCar"
+            ReferencedContainer = "container:TensorCar.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </LaunchAction>
@@ -85,10 +85,10 @@
          runnableDebuggingMode = "0">
          <BuildableReference
             BuildableIdentifier = "primary"
-            BlueprintIdentifier = "B1BAEFC9385BBEBD61CBA96B"
-            BuildableName = "AutoOBD.app"
-            BlueprintName = "AutoOBD"
-            ReferencedContainer = "container:AutoOBD.xcodeproj">
+            BlueprintIdentifier = "B8BC029283760D18DB0E8106"
+            BuildableName = "TensorCar.app"
+            BlueprintName = "TensorCar"
+            ReferencedContainer = "container:TensorCar.xcodeproj">
          </BuildableReference>
       </BuildableProductRunnable>
    </ProfileAction>

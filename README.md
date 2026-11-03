@@ -1,12 +1,17 @@
-# TensorCar · Auto OBD
+# TensorCar
+
+*by OnceOnce Studio*
 
 App de iPhone (SwiftUI) que lee los datos de tu auto con un adaptador **OBD-II ELM327 por WiFi**. Se probó contra un auto simulado; está pensada para una VW Taigun 2024, pero funciona con cualquier auto con puerto OBD-II (en general, autos de 2008 en adelante).
 
-> No necesita internet ni cuenta. Todo lo que guarda se queda en el iPhone.
+> No necesita internet ni cuenta. Todo lo que guarda se queda en el iPhone, y puedes respaldarlo en tu nube.
 
 ---
 
 ## Qué hace
+
+### Bienvenida
+- La primera vez que abres la app aparece un tutorial animado de 5 pasos: qué es TensorCar, cómo conectar el adaptador, la lectura en vivo, las fallas y el historial. Se puede saltar y no vuelve a salir.
 
 ### Conexión
 - Se conecta por TCP al adaptador WiFi (por defecto `192.168.0.10:35000`, editable y recordado).
@@ -48,7 +53,8 @@ App de iPhone (SwiftUI) que lee los datos de tu auto con un adaptador **OBD-II E
 
 ### Fallas
 - Estado de la luz de motor (MIL) y cantidad de fallas.
-- Códigos **almacenados**, **pendientes** y **permanentes**, con el sistema al que pertenecen y un botón para buscar su significado.
+- Códigos **almacenados**, **pendientes** y **permanentes**, cada uno con su título y el sistema al que pertenece.
+- **Significado sin internet:** al tocar un código se abre su detalle (qué significa, causas probables y síntomas) desde una base de 9,533 códigos genéricos incluida en la app. Las descripciones están en inglés. Si el código no está (por ejemplo, uno propio del fabricante como P1xxx), hay un botón para buscarlo en internet.
 - **Borrar fallas** con confirmación (queda registrado en el historial).
 
 ### Auto
@@ -71,7 +77,8 @@ Una línea de tiempo guardada en el iPhone:
   | Hasta 4 psi sobre el ideal | Bien |
   | > 4 psi sobre el ideal | Alta |
 
-- Mantén presionado un registro para eliminarlo.
+- **Desliza** un registro a la izquierda para eliminarlo o a la derecha para editarlo. En los escaneos automáticos se puede editar el texto, la fecha y las notas, pero no el tipo.
+- **Exportar / Importar:** exporta todo el historial a un archivo JSON (`TensorCar-historial-AAAA-MM-DD.json`) para guardarlo en iCloud Drive, Google Drive u otra nube. Importar agrega solo los registros que no estén ya en la app y nunca borra nada, así que sirve para pasar el historial a otro iPhone o recuperarlo tras reinstalar. El botón ⓘ lo explica dentro de la app.
 
 ### Apariencia
 - Botón en el encabezado de cada pestaña que alterna **automático → claro → oscuro**.
@@ -86,7 +93,8 @@ Una línea de tiempo guardada en el iPhone:
 - **Historial de colisiones y talleres:** no existe en el auto. Para el historial oficial, pide al concesionario el historial de servicio con tu VIN.
 - Solo adaptadores **WiFi**. Bluetooth no está soportado.
 - Algunos clones ELM327 responden fuera del estándar.
-- El historial vive solo en el iPhone: si borras la app, se pierde (no hay iCloud ni exportación).
+- El historial vive en el iPhone. No se sincroniza solo: si borras la app sin haber exportado un respaldo, se pierde.
+- Las descripciones de fallas sin conexión están en inglés y solo cubren códigos genéricos.
 - Si se corta la comunicación a mitad de una lectura, la app desconecta y hay que reconectar a mano.
 - Presión de neumáticos solo en psi.
 
@@ -106,8 +114,8 @@ Una línea de tiempo guardada en el iPhone:
 Requisitos: iOS 17 o posterior. Desarrollado y probado con Xcode 27.
 
 ### Correr en el iPhone
-1. Abre `AutoOBD.xcodeproj` en Xcode.
-2. En **Signing & Capabilities** elige tu Team (y cambia el bundle id `com.gera.autoobd` si hace falta).
+1. Abre `TensorCar.xcodeproj` en Xcode.
+2. En **Signing & Capabilities** elige tu Team (y cambia el bundle id `com.gera.autoobd` si hace falta; se conservó del nombre anterior para no perder el historial de instalaciones existentes).
 3. Conecta el iPhone y dale **Run**.
 
 ### Regenerar el proyecto
@@ -118,10 +126,21 @@ xcodegen generate
 ```
 
 ### Pruebas
-Las pruebas usan el auto simulado: protocolo ELM327, respuestas multi-trama (VIN), fallas, monitores, fórmulas de sensores, batería, neumáticos e historial.
+Las pruebas usan el auto simulado: protocolo ELM327, respuestas multi-trama (VIN), fallas, monitores, fórmulas de sensores, batería, neumáticos, historial, respaldo (exportar/importar/editar) y la base de fallas.
 
 ```bash
-xcodebuild test -project AutoOBD.xcodeproj -scheme AutoOBD -destination 'platform=iOS Simulator,name=iPhone 16'
+xcodebuild test -project TensorCar.xcodeproj -scheme TensorCar -destination 'platform=iOS Simulator,name=iPhone 16'
+```
+
+### Base de códigos de falla
+`Sources/DTC.json` se genera desde [OBDex](https://github.com/foerbsnavi/OBDex) (datos CC0, dominio público) con título, descripción, causas y síntomas en inglés. Para actualizarla:
+
+```bash
+curl -LO https://foerbsnavi.github.io/OBDex/generic.json
+```
+
+```bash
+python3 Tools/build_dtc.py generic.json Sources/DTC.json
 ```
 
 ### Estructura
@@ -133,10 +152,14 @@ xcodebuild test -project AutoOBD.xcodeproj -scheme AutoOBD -destination 'platfor
 | `Sources/ELM327.swift` | Protocolo ELM327: inicialización, consultas, PIDs soportados, fallas, VIN, monitores, voltaje |
 | `Sources/PIDs.swift` | Tabla de sensores y fórmulas, guía de sensores clave, reglas de batería y neumáticos |
 | `Sources/OBDModel.swift` | Estado de la app: conexión, lectura continua, fallas, escaneo al historial |
-| `Sources/History.swift` | Historial guardado en `Documents/history.json` |
-| `Sources/Views.swift` | Todas las pantallas y el estilo |
+| `Sources/History.swift` | Historial guardado en `Documents/history.json`, respaldo JSON (exportar/importar) |
+| `Sources/DTCDictionary.swift` | Lectura de la base de fallas offline y pantalla de detalle |
+| `Sources/DTC.json` | Base de 9,533 códigos de falla genéricos |
+| `Sources/Tutorial.swift` | Tutorial animado de bienvenida |
+| `Sources/Views.swift` | El resto de las pantallas y el estilo |
 | `Sources/Assets.xcassets` | Ícono de la app (claro y oscuro) |
 | `Tests/OBDTests.swift` | Pruebas unitarias |
+| `Tools/build_dtc.py` | Genera `DTC.json` desde OBDex |
 
 ### Cómo habla con el auto
 1. Abre TCP al adaptador y lo inicializa: `ATZ`, `ATE0`, `ATL0`, `ATS0`, `ATH0`, `ATSP0` (protocolo automático).
